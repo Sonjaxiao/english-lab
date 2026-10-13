@@ -45,6 +45,8 @@ jobs:
           LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
           LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
           LLM_MODEL: ${{ secrets.LLM_MODEL }}
+          YOUTUBE_COOKIES: ${{ secrets.YOUTUBE_COOKIES }}
+          BI_SESSDATA: ${{ secrets.BILI_SESSDATA }}
         run: python tools/action_import.py "${{ steps.url.outputs.url }}"
 
       - name: Commit & push

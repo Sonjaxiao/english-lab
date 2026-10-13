@@ -52,7 +52,12 @@ def run_fetch(url):
         capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=420)
     print((r.stdout or "")[-1500:], flush=True)
     if r.returncode != 0:
-        raise RuntimeError("抓取失败: " + ((r.stderr or "")[-400:] or (r.stdout or "")[-400:]))
+        err = ((r.stderr or "")[-400:] or (r.stdout or "")[-400:])
+        if "Sign in to confirm" in err or "not a bot" in err or "风控" in err:
+            raise RuntimeError("YouTube 对 GitHub 云端 IP 风控。修复：仓库 Settings→Secrets and variables→Actions "
+                               "添加 Secret YOUTUBE_COOKIES（值=浏览器导出的 cookies.txt 全文）后 reopen 本 issue 重试；"
+                               "或改用学习站「导入→手动导入」上传 SRT 字幕。")
+        raise RuntimeError("抓取失败: " + err)
     new = [p for p in glob.glob(os.path.join(pend_dir, "*.json"))
            if p not in before and "_meta" not in p]
     if not new:

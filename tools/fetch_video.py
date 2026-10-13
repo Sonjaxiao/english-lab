@@ -129,11 +129,134 @@ def group_asr_events(events):
     return build_segments_from_lines(lines)
 
 
+INVIDIOUS_HOSTS = [
+    "https://inv.nadeko.net",
+    "https://invidious.nerdvpn.de",
+    "https://yewtu.be",
+    "https://iv.datura.network",
+    "https://invidious.f5.si",
+]
+
+YT_CLIENTS = [None, "tv", "web_safari", "android_vr", "mweb"]
+BOT_MARKS = ("Sign in to confirm", "confirm you", "not a bot")
+
+
+def _yt_cookiefile():
+    """YOUTUBE_COOKIES（Netscape cookies.txt 全文）写入临时文件，返回路径或 None"""
+    rawv = os.environ.get("YOUTUBE_COOKIES", "").strip()
+    if not rawv:
+        return None
+    import tempfile
+    p = os.path.join(tempfile.gettempdir(), "yt_cookies.txt")
+    body = rawv.replace("\\n", "\n") if ("\n" not in rawv and "\\n" in rawv) else rawv
+    with open(p, "w", encoding="utf-8") as f:
+        f.write(body)
+    return p
+
+
+def parse_vtt_lines(vtt):
+    """VTT → [{start, dur, text}]，供 build_segments_from_lines 使用"""
+    tc = re.compile(r"(\d+):(\d{2}):(\d{2})\.(\d{3})\s*-->\s*(\d+):(\d{2}):(\d{2})\.(\d{3})")
+    lines = []
+    for b in re.split(r"\r?\n\r?\n+", vtt or ""):
+        m = tc.search(b)
+        if not m:
+            continue
+        g = [int(x) for x in m.groups()]
+        start = g[0] * 3600 + g[1] * 60 + g[2] + g[3] / 1000.0
+        end = g[4] * 3600 + g[5] * 60 + g[6] + g[7] / 1000.0
+        body = " ".join(ln.strip() for ln in b[m.end():].splitlines() if ln.strip())
+        body = re.sub(r"<[^>]+>", "", body).strip()
+        if body:
+            lines.append({"start": start, "dur": max(0.4, end - start), "text": body})
+    return lines
+
+
+def fetch_youtube_invidious(video_id):
+    """Invidious 公共实例兜底：数据中心 IP 被 YouTube 风控时用"""
+    import requests
+    for host in INVIDIOUS_HOSTS:
+        try:
+            r = requests.get(host + "/api/v1/videos/" + video_id, timeout=15,
+                             headers={"User-Agent": UA})
+            if r.status_code != 200:
+                continue
+            d = r.json()
+            caps = d.get("captions") or []
+            if not caps:
+                continue
+            chosen = None
+            for c in caps:
+                code = (c.get("language_code") or c.get("languageCode") or "").lower()
+                if code.startswith("en"):
+                    chosen = c
+                    break
+            if not chosen:
+                chosen = caps[0]
+            cap_path = chosen.get("url") or ""
+            if cap_path.startswith("/"):
+                cap_url = host + cap_path
+            elif cap_path.startswith("http"):
+                cap_url = cap_path
+            else:
+                cap_url = host + "/api/v1/captions/" + video_id + "?lang=" + (chosen.get("language_code") or "en")
+            vtt = requests.get(cap_url, timeout=15, headers={"User-Agent": UA}).text
+            lines = parse_vtt_lines(vtt)
+            if not lines:
+                continue
+            print("[youtube] Invidious 兜底成功 via " + host, flush=True)
+            return {
+                "platform": "youtube",
+                "videoId": video_id,
+                "url": "https://www.youtube.com/watch?v=" + video_id,
+                "title": d.get("title", ""),
+                "author": d.get("author", ""),
+                "duration": int(d.get("lengthSeconds") or 0),
+                "cover": "https://i.ytimg.com/vi/%s/hqdefault.jpg" % video_id,
+                "lang": (chosen.get("language_code") or "en").split("-")[0],
+                "segments": build_segments_from_lines(lines),
+                "needs_subs": False,
+            }
+        except Exception as e:
+            print("[invidious] %s failed: %s" % (host, str(e)[:100]), flush=True)
+            continue
+    return None
+
+
 def fetch_youtube(video_id):
     import yt_dlp
     url = "https://www.youtube.com/watch?v=" + video_id
-    with yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True, "skip_download": True}) as ydl:
-        info = ydl.extract_info(url, download=False)
+    cookiefile = _yt_cookiefile()
+    info, first_meta, last_err = None, None, None
+    for cl in YT_CLIENTS:
+        opts = {"quiet": True, "no_warnings": True, "skip_download": True}
+        if cookiefile:
+            opts["cookiefile"] = cookiefile
+        if cl:
+            opts["extractor_args"] = {"youtube": {"player_client": [cl]}}
+        try:
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                meta = ydl.extract_info(url, download=False)
+        except Exception as e:
+            last_err = e
+            print("[youtube] client=%s failed: %s" % (cl or "default", str(e)[:110]), flush=True)
+            continue
+        if meta and not first_meta:
+            first_meta = meta
+        if meta and (meta.get("subtitles") or meta.get("automatic_captions")):
+            info = meta
+            break
+    if info is None:
+        inv = fetch_youtube_invidious(video_id)
+        if inv and inv.get("segments"):
+            return inv
+        if first_meta:
+            print("[youtube] 有元数据但各客户端均无字幕 → needs_subs", flush=True)
+            info = first_meta
+        else:
+            raise SystemExit("YouTube 抓取失败（数据中心 IP 风控）。修复：仓库 Settings→Secrets and variables→Actions "
+                             "添加 Secret YOUTUBE_COOKIES（值=浏览器导出的 cookies.txt 全文）后 reopen 重试；"
+                             "或改用学习站「导入→手动导入」上传 SRT。")
     caps = {}
     for lang, fmts in (info.get("subtitles") or {}).items():
         caps.setdefault(lang, {}).update({"manual": True, "fmts": fmts})
