@@ -28,7 +28,20 @@ jobs:
           python-version: "3.11"
 
       - name: Install deps
-        run: pip install yt-dlp requests
+        run: pip install yt-dlp requests bgutil-ytdlp-pot-provider
+
+      - name: Start PO token provider (bgutil)
+        run: |
+          git clone --depth 1 https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git /tmp/bg
+          cd /tmp/bg/server
+          npm install --no-audit --no-fund
+          npm run build || true
+          nohup node build/main.js > /tmp/bgutil.log 2>&1 &
+          for i in 1 2 3 4 5 6; do
+            sleep 2
+            if curl -sf http://127.0.0.1:4416/ping > /dev/null; then echo "PO provider up"; break; fi
+          done
+          curl -s http://127.0.0.1:4416/ping || echo "WARN: provider ping failed"
 
       - name: Extract video URL
         id: url
