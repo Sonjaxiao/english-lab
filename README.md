@@ -132,3 +132,12 @@ corpus-app/
   换成后端 API 调用即可，页面代码不用动。
 - **付费/激活码**：在路由层加登录守卫 + 激活码校验页（原站逻辑：下单→激活码→解锁全库）。
 - **在线词典**：词卡数据可改接免费词典 API（如 Free Dictionary API），`lookup()` 单点替换。
+
+## 视频导入（导入页）
+
+打开站点导航「导入」：
+
+1. **自动入库（推荐）**：贴 YouTube/B站链接 → 识别 → 点「去 GitHub 提交导入请求」→ 在预填 issue 页点 Submit。云端 GitHub Actions 自动：抓字幕 → AI 翻译 → 生成词典 → 入库上线（2-5 分钟，结果回帖在 issue 下）。
+2. **手动导入**：粘贴 SRT/VTT 字幕（或每行一句的纯文本）→ 勾选自动翻译 → 导入本机。带时间轴+视频链接=在线播放逐句同步；纯文本=TTS 朗读模式。
+
+**翻译质量**：默认免费机翻（Google 接口）。在仓库 Settings → Secrets → Actions 添加 LLM_API_KEY（智谱/DeepSeek/OpenAI 等 OpenAI 兼容 key）后自动升级为 AI 翻译+词典生成；可选 LLM_BASE_URL、LLM_MODEL 自定义服务商。

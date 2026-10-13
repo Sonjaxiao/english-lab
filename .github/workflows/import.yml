@@ -1,0 +1,80 @@
+name: import-video
+
+# issue 驱动的云端导入流水线：
+# 学习站「导入」页生成预填 issue → 本 workflow 抓取+翻译+入库 → push 触发 Pages 自动上线
+on:
+  issues:
+    types: [opened, reopened]
+
+permissions:
+  issues: write
+  contents: write
+
+concurrency:
+  group: import-video
+  cancel-in-progress: false
+
+jobs:
+  import:
+    # 仅仓库所有者的 issue 触发（公开仓库防陌生人滥用）
+    if: github.event.issue.user.login == github.repository_owner
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: pip install yt-dlp requests
+
+      - name: Extract video URL
+        id: url
+        env:
+          TEXT: "${{ github.event.issue.title }} — ${{ github.event.issue.body }}"
+        run: |
+          URL="$(printf '%s' "$TEXT" | grep -oE 'https?://[^[:space:]">)]+' | head -1 || true)"
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+
+      - name: Import pipeline
+        id: imp
+        if: steps.url.outputs.url != ''
+        env:
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
+          LLM_MODEL: ${{ secrets.LLM_MODEL }}
+        run: python tools/action_import.py "${{ steps.url.outputs.url }}"
+
+      - name: Commit & push
+        if: steps.imp.outputs.result == 'imported'
+        run: |
+          git config user.name "import-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add js/episodes-imported.js
+          git commit -m "import: ${{ steps.imp.outputs.title }} (#${{ github.event.issue.number }})"
+          git push
+
+      - name: Report on issue
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RESULT: ${{ steps.imp.outputs.result }}
+          EP: ${{ steps.imp.outputs.ep_id }}
+          TITLE: ${{ steps.imp.outputs.title }}
+          REASON: ${{ steps.imp.outputs.reason }}
+          NUM: ${{ github.event.issue.number }}
+        run: |
+          if [ "$RESULT" = "imported" ]; then
+            gh issue comment "$NUM" --body "✅ 已导入 **$TITLE**（$EP，翻译模式见 Actions 日志）。1-2 分钟后刷新学习站目录即可看到新语料。"
+            gh issue close "$NUM"
+          elif [ "$RESULT" = "exists" ]; then
+            gh issue comment "$NUM" --body "ℹ️ 该视频已在语料库中，无需重复导入。"
+            gh issue close "$NUM"
+          elif [ "$RESULT" = "error" ]; then
+            gh issue comment "$NUM" --body "❌ 导入失败：$REASON（修正后可 reopen 重试）"
+            gh issue close "$NUM"
+          else
+            gh issue comment "$NUM" --body "❌ 未在 issue 中识别到视频链接。请贴 YouTube / B站 视频页完整链接后 reopen。" || true
+          fi

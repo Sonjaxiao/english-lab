@@ -148,6 +148,17 @@ mark { background: #ffe58a; color: inherit; border-radius: 3px; padding: 0 2px; 
 .src-switch span { margin-right: 2px; }
 .src-switch .sw { border: 1px solid var(--border, #bbb); background: transparent; color: var(--fg2); border-radius: 6px; padding: 3px 10px; font-size: 12px; cursor: pointer; }
 .src-switch .sw.on { background: var(--accent, #4a9eff); border-color: var(--accent, #4a9eff); color: #fff; }
+
+/* ---- 导入页 ---- */
+.imp-panel h3 { margin: 0 0 10px; }
+.imp-panel h3 .hint { font-weight: normal; margin-left: 6px; }
+.imp-input { width: 100%; box-sizing: border-box; padding: 9px 12px; border: 1px solid var(--border, #ccc); border-radius: 8px; font-size: 14px; margin-bottom: 8px; background: var(--bg, #fff); color: var(--fg, #222); }
+.imp-area { width: 100%; box-sizing: border-box; padding: 9px 12px; border: 1px solid var(--border, #ccc); border-radius: 8px; font-size: 13px; font-family: Consolas, monospace; margin-bottom: 8px; resize: vertical; background: var(--bg, #fff); color: var(--fg, #222); }
+.imp-preview { display: flex; gap: 12px; align-items: center; margin: 10px 0; }
+.imp-cover { width: 120px; border-radius: 8px; flex: none; }
+.imp-item { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px dashed var(--border, #ddd); }
+.imp-item-t { flex: 1; font-weight: 600; }
+.imp-item .tbtn { flex: none; }
 .src-link { text-decoration: none; cursor: pointer; }
 .src-link:hover { color: var(--fg); }
 .study-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; }
