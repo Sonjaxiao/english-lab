@@ -27,21 +27,34 @@ jobs:
         with:
           python-version: "3.11"
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
       - name: Install deps
-        run: pip install yt-dlp requests bgutil-ytdlp-pot-provider
+        run: pip install yt-dlp requests bgutil-ytdlp-pot-provider==2.0.2
 
       - name: Start PO token provider (bgutil)
+        shell: bash
         run: |
-          git clone --depth 1 https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git /tmp/bg
+          set -euo pipefail
+          git clone --depth 1 --branch 2.0.2 https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git /tmp/bg
           cd /tmp/bg/server
-          npm install --no-audit --no-fund
-          npm run build || true
+          npm ci --no-audit --no-fund
+          npx tsc
           nohup node build/main.js > /tmp/bgutil.log 2>&1 &
+          BGUTIL_PID=$!
           for i in 1 2 3 4 5 6; do
             sleep 2
-            if curl -sf http://127.0.0.1:4416/ping > /dev/null; then echo "PO provider up"; break; fi
+            if curl -fsS http://127.0.0.1:4416/ping > /dev/null; then
+              echo "PO provider up"
+              exit 0
+            fi
+            if ! kill -0 "$BGUTIL_PID" 2>/dev/null; then break; fi
           done
-          curl -s http://127.0.0.1:4416/ping || echo "WARN: provider ping failed"
+          echo "ERROR: PO token provider did not become healthy"
+          cat /tmp/bgutil.log
+          exit 1
 
       - name: Extract video URL
         id: url
