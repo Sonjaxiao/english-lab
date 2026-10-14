@@ -152,7 +152,8 @@ def import_link_only(src):
     """Register a playable video without contacting the video host or requiring cookies."""
     body = os.environ.get("ISSUE_BODY", "")
     def field(name):
-        m = re.search(r"^" + re.escape(name) + r"\s*:\s*(.+)$", body, re.M)
+        # Only consume this line: \s may otherwise swallow the next field.
+        m = re.search(r"^" + re.escape(name) + r"[ \t]*:[ \t]*([^\r\n]*)\r?$", body, re.M)
         return re.sub(r"[\r\n*/]", " ", m.group(1)).strip()[:180] if m else ""
 
     title = field("标题") or ("YouTube 视频 " if src["platform"] == "youtube" else "B站视频 ") + src["videoId"]
