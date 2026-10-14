@@ -62,12 +62,24 @@ mark { background: #ffe58a; color: inherit; border-radius: 3px; padding: 0 2px; 
 }
 .nav-links a:hover { background: var(--panel2); color: var(--fg); }
 .nav-links a.on { background: var(--accent); color: var(--accent-fg); }
+.nav-import { flex: none; display: inline-flex; align-items: center; justify-content: center; min-height: 40px;
+  padding: 0 14px; border-radius: 10px; background: var(--accent); color: var(--accent-fg);
+  font-size: 14px; font-weight: 600; text-decoration: none; white-space: nowrap; }
+.nav-import:hover { opacity: .86; }
+.nav-import:focus-visible { outline: 2px solid var(--fg2); outline-offset: 2px; }
 .nav-burger { display: none; margin-left: auto; background: none; border: none; font-size: 20px; color: var(--fg); }
 @media (max-width: 760px) {
-  .nav-burger { display: block; }
+  .nav-import { margin-left: auto; }
+  .nav-burger { display: block; margin-left: 0; min-width: 40px; min-height: 40px; }
   .nav-links { display: none; position: absolute; top: 100%; left: 0; right: 0; flex-direction: column;
     background: var(--panel); border-bottom: 1px solid var(--border); padding: 10px 14px; margin: 0; }
   .nav-links.open { display: flex; }
+}
+@media (max-width: 420px) {
+  .topnav { padding: 10px 12px; gap: 8px; }
+  .brand-text i { display: none; }
+  .brand-text b { font-size: 12px; }
+  .nav-import { padding: 0 10px; font-size: 13px; }
 }
 
 /* ---------- 按钮 ---------- */
@@ -127,6 +139,7 @@ mark { background: #ffe58a; color: inherit; border-radius: 3px; padding: 0 2px; 
 .ep-initial { font-size: 34px; font-weight: 800; color: rgba(0,0,0,.35); letter-spacing: .05em; }
 .ep-dur { position: absolute; right: 8px; bottom: 8px; font-size: 11px; color: #fff; background: rgba(0,0,0,.55); padding: 1px 7px; border-radius: 6px; }
 .ep-status { position: absolute; left: 8px; top: 8px; font-size: 11px; background: var(--ok); color: #fff; padding: 1px 8px; border-radius: 999px; }
+.ep-pending { position: absolute; right: 8px; bottom: 8px; font-size: 11px; color: #fff; background: rgba(25,34,48,.83); padding: 2px 8px; border-radius: 999px; }
 .ep-info { padding: 12px 14px 14px; }
 .ep-author { display: flex; gap: 6px; font-size: 13px; color: var(--fg2); margin-bottom: 2px; }
 .ep-title { font-weight: 600; font-size: 15px; }
@@ -139,6 +152,12 @@ mark { background: #ffe58a; color: inherit; border-radius: 3px; padding: 0 2px; 
 .video-frame { position: relative; aspect-ratio: 16 / 9; width: 100%; border-radius: var(--radius); overflow: hidden; background: #000; margin-bottom: 12px; }
 .video-frame iframe, .video-frame #yt-player { position: absolute; inset: 0; width: 100% !important; height: 100% !important; border: 0; }
 .video-frame video { position: absolute; inset: 0; width: 100% !important; height: 100% !important; border: 0; background: #000; }
+.video-only-panel { max-width: 880px; margin: 16px auto 48px; }
+.video-only-panel .video-frame { margin-bottom: 20px; }
+.video-only-copy { padding: 24px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); }
+.video-only-copy h3 { margin: 0 0 8px; }
+.video-only-copy .hint { line-height: 1.7; }
+.video-only-copy .btn { margin: 8px 0 4px; }
 .engine-tip { font-size: 12px; color: var(--fg2); margin: 6px 0 2px; }
 .lite-tip { font-size: 12px; line-height: 1.8; color: var(--fg2); background: rgba(255, 193, 7, .1); border: 1px solid rgba(255, 193, 7, .4); border-radius: 8px; padding: 8px 10px; margin: 6px 0 2px; }
 .lite-tip code { background: rgba(127, 127, 127, .18); padding: 1px 5px; border-radius: 4px; }
@@ -152,6 +171,13 @@ mark { background: #ffe58a; color: inherit; border-radius: 3px; padding: 0 2px; 
 /* ---- 导入页 ---- */
 .imp-panel h3 { margin: 0 0 10px; }
 .imp-panel h3 .hint { font-weight: normal; margin-left: 6px; }
+.imp-url-row .imp-input { flex: 1; min-width: 0; width: auto; margin-bottom: 0; }
+.imp-url-row .btn { flex: none; white-space: nowrap; }
+.imp-issue-row { flex-wrap: wrap; }
+.imp-target { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; padding: 12px 14px; margin-bottom: 12px; border-radius: 8px; background: var(--panel2); }
+.imp-target .imp-cancel { margin-left: auto; white-space: nowrap; }
+.imp-file-label { display: inline-flex; align-items: center; gap: 10px; margin: 6px 0 10px; }
+.imp-file-label input { max-width: 230px; }
 .imp-input { width: 100%; box-sizing: border-box; padding: 9px 12px; border: 1px solid var(--border, #ccc); border-radius: 8px; font-size: 14px; margin-bottom: 8px; background: var(--bg, #fff); color: var(--fg, #222); }
 .imp-area { width: 100%; box-sizing: border-box; padding: 9px 12px; border: 1px solid var(--border, #ccc); border-radius: 8px; font-size: 13px; font-family: Consolas, monospace; margin-bottom: 8px; resize: vertical; background: var(--bg, #fff); color: var(--fg, #222); }
 .imp-preview { display: flex; gap: 12px; align-items: center; margin: 10px 0; }
