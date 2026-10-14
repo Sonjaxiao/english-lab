@@ -1,7 +1,7 @@
 name: import-video
 
 # issue 驱动的云端导入流水线：
-# 学习站「导入」页生成预填 issue → 本 workflow 抓取+翻译+入库 → push 触发 Pages 自动上线
+# 学习站「导入」页生成预填 issue → 链接先入库（或旧请求抓取字幕）→ push 触发 Pages 上线
 on:
   issues:
     types: [opened, reopened]
@@ -27,14 +27,28 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Choose import mode
+        id: mode
+        env:
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+        run: |
+          if [[ "$ISSUE_TITLE" == "导入视频:"* ]]; then
+            echo "mode=link" >> "$GITHUB_OUTPUT"
+          else
+            echo "mode=full" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/setup-node@v4
+        if: steps.mode.outputs.mode == 'full'
         with:
           node-version: "22"
 
       - name: Install deps
+        if: steps.mode.outputs.mode == 'full'
         run: pip install yt-dlp requests bgutil-ytdlp-pot-provider==2.0.2
 
       - name: Start PO token provider (bgutil)
+        if: steps.mode.outputs.mode == 'full'
         shell: bash
         run: |
           set -euo pipefail
@@ -59,7 +73,7 @@ jobs:
       - name: Extract video URL
         id: url
         env:
-          TEXT: "${{ github.event.issue.title }} — ${{ github.event.issue.body }}"
+          TEXT: ${{ github.event.issue.title }} — ${{ github.event.issue.body }}
         run: |
           URL="$(printf '%s' "$TEXT" | grep -oE 'https?://[^[:space:]">)]+' | head -1 || true)"
           echo "url=$URL" >> "$GITHUB_OUTPUT"
@@ -73,15 +87,22 @@ jobs:
           LLM_MODEL: ${{ secrets.LLM_MODEL }}
           YOUTUBE_COOKIES: ${{ secrets.YOUTUBE_COOKIES }}
           BI_SESSDATA: ${{ secrets.BILI_SESSDATA }}
-        run: python tools/action_import.py "${{ steps.url.outputs.url }}"
+          IMPORT_MODE: ${{ steps.mode.outputs.mode }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          VIDEO_URL: ${{ steps.url.outputs.url }}
+        run: python tools/action_import.py "$VIDEO_URL"
 
       - name: Commit & push
-        if: steps.imp.outputs.result == 'imported'
+        id: commit
+        if: steps.imp.outputs.result == 'imported' || steps.imp.outputs.result == 'video_only'
+        env:
+          EP_TITLE: ${{ steps.imp.outputs.title }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
         run: |
           git config user.name "import-bot"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add js/episodes-imported.js
-          git commit -m "import: ${{ steps.imp.outputs.title }} (#${{ github.event.issue.number }})"
+          git commit -m "import: ${EP_TITLE:0:100} (#${ISSUE_NUMBER})"
           git push
 
       - name: Report on issue
@@ -92,10 +113,16 @@ jobs:
           EP: ${{ steps.imp.outputs.ep_id }}
           TITLE: ${{ steps.imp.outputs.title }}
           REASON: ${{ steps.imp.outputs.reason }}
+          PUSH_OUTCOME: ${{ steps.commit.outcome }}
           NUM: ${{ github.event.issue.number }}
         run: |
-          if [ "$RESULT" = "imported" ]; then
+          if { [ "$RESULT" = "imported" ] || [ "$RESULT" = "video_only" ]; } && [ "$PUSH_OUTCOME" != "success" ]; then
+            gh issue comment "$NUM" --body "❌ 视频已处理但提交仓库失败，请查看本次 Actions 日志后 reopen 重试。"
+          elif [ "$RESULT" = "imported" ]; then
             gh issue comment "$NUM" --body "✅ 已导入 **$TITLE**（$EP，翻译模式见 Actions 日志）。1-2 分钟后刷新学习站目录即可看到新语料。"
+            gh issue close "$NUM"
+          elif [ "$RESULT" = "video_only" ]; then
+            gh issue comment "$NUM" --body "✅ 视频已入库（$EP）。1-2 分钟后刷新学习站即可播放；目前没有学习字幕，可在视频页添加 SRT/VTT（仅保存在当前浏览器）。"
             gh issue close "$NUM"
           elif [ "$RESULT" = "exists" ]; then
             gh issue comment "$NUM" --body "ℹ️ 该视频已在语料库中，无需重复导入。"
