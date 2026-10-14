@@ -10,23 +10,21 @@
 
   /* __EPISODES_BELOW__ */
 
-  /* ===== ep006: 作者: ===== */
+  /* ===== ep006: YouTube 视频 utJkYzxeTK4 ===== */
   window.CORPUS._imported.push("ep006");
   window.CORPUS.episodes.push({
  "id": "ep006",
- "title": "作者:",
- "shortTitle": "作者:",
+ "title": "YouTube 视频 utJkYzxeTK4",
+ "shortTitle": "YouTube 视频 utJkYzxeTK4",
  "cover": "https://i.ytimg.com/vi/utJkYzxeTK4/hqdefault.jpg",
  "duration": 0,
  "speaker": {
-  "name": "封面:",
+  "name": "导入",
   "gender": "F",
   "flag": "🌍"
  },
  "stars": 3,
- "tags": [
-  "导入"
- ],
+ "tags": ["导入"],
  "mediaUrl": "",
  "source": {
   "platform": "youtube",
@@ -35,7 +33,6 @@
  },
  "subtitles": []
 });
-
 
   /* ===== ep005: Alone but Not Lonely - ep. 1 ===== */
   window.CORPUS._imported.push("ep005");
