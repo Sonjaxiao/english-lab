@@ -1,7 +1,7 @@
 /* =========================================================================
  * import.js — 「导入」页：贴视频链接 → 入库语料
- *  ① 自动入库：生成预填 GitHub issue → 云端 Actions 抓取+翻译+词典 → 自动上线
- *  ② 手动导入：粘贴 SRT/VTT/纯文本字幕 → 本地即刻入库（可选免费机翻）
+ *  ① 链接入库：生成预填 GitHub issue → 云端登记视频（不要求字幕）
+ *  ② 添加字幕：粘贴 SRT/VTT → 当前浏览器补齐逐句学习字幕
  *  本文件在 app.js 之前加载：启动时把 localStorage 里的自定义集合并进 CORPUS。
  * ========================================================================= */
 (function () {
@@ -19,6 +19,10 @@
     mergeIntoCorpus() {
       const ids = new Set(CORPUS.episodes.map((e) => e.id));
       Custom.all().forEach((ep) => { if (!ids.has(ep.id)) CORPUS.episodes.push(ep); });
+      const overrides = DB.get("subtitleOverrides", {});
+      CORPUS.episodes.forEach((ep) => {
+        if ((!ep.subtitles || !ep.subtitles.length) && Array.isArray(overrides[ep.id])) ep.subtitles = overrides[ep.id];
+      });
     },
   };
   Custom.mergeIntoCorpus();
@@ -160,22 +164,27 @@
   const ImportPage = {
     name: "ImportPage",
     data() {
+      const targetId = sessionStorage.getItem("ccSubtitleTarget") || "";
+      const target = CORPUS.episodes.find((e) => e.id === targetId);
       return {
         autoUrl: "", autoPreview: null, autoChecking: false, autoParsed: null,
-        manUrl: "", manText: "", manTranslate: true, manBusy: false, manProgress: "",
+        targetId: target ? targetId : "",
+        manUrl: target && target.source ? target.source.url : "", manText: "", manTranslate: true, manBusy: false, manProgress: "",
         custom: Custom.all(),
       };
     },
     computed: {
+      targetEp() { return CORPUS.episodes.find((e) => e.id === this.targetId) || null; },
       issueUrl() {
         if (!this.autoParsed) return "";
         const r = repoInfo();
+        const clean = (s) => String(s || "").replace(/[\r\n]/g, " ").slice(0, 180);
+        const p = this.autoPreview || {};
         const body = "来源链接: " + this.autoParsed.url +
-          "\n\n由学习站「导入」页自动生成。\n" +
-          "云端机器人会抓取字幕、翻译并生成词典，完成后自动关闭本 issue 并上线新语料。\n" +
-          "（预计 2-5 分钟，完成后刷新目录页即可看到新内容）";
+          "\n标题: " + clean(p.title) + "\n作者: " + clean(p.author) + "\n封面: " + clean(p.cover) +
+          "\n\n由学习站生成：先将视频加入目录，无需字幕或 Cookie。字幕可稍后在当前浏览器单独添加。";
         return "https://github.com/" + r.owner + "/" + r.repo + "/issues/new?title=" +
-          encodeURIComponent("导入: " + this.autoParsed.url) + "&body=" + encodeURIComponent(body);
+          encodeURIComponent("导入视频: " + this.autoParsed.url) + "&body=" + encodeURIComponent(body);
       },
     },
     methods: {
@@ -191,6 +200,18 @@
         this.autoChecking = false;
       },
       goIssue() { if (this.issueUrl) window.open(this.issueUrl, "_blank"); },
+      clearTarget() {
+        sessionStorage.removeItem("ccSubtitleTarget");
+        this.targetId = ""; this.manUrl = ""; this.manText = "";
+      },
+
+      async loadSubtitleFile(ev) {
+        const file = ev.target.files && ev.target.files[0];
+        if (!file) return;
+        if (!/\.(srt|vtt)$/i.test(file.name)) { this.toast("请选择 .srt 或 .vtt 字幕文件"); ev.target.value = ""; return; }
+        this.manText = await file.text();
+        ev.target.value = "";
+      },
 
       async doManual() {
         if (this.manBusy) return;
@@ -200,6 +221,7 @@
         if (src && src.platform === "b23") { this.toast("B站短链请粘贴完整链接"); return; }
         let subs = parseTimedText(raw);
         let timed = true;
+        if (this.targetEp && !subs.length) { this.toast("为已有视频添加字幕需要带时间轴的 SRT/VTT 文件"); return; }
         if (!subs.length) { timed = false; const lines = parsePlainLines(raw); subs = lines.map((t) => ({ start: 0, end: 0, text: t })); }
         if (!subs.length) { this.toast("没有解析出任何句子"); return; }
         this.manBusy = true;
@@ -208,6 +230,19 @@
           if (this.manTranslate) {
             this.manProgress = "翻译中 0/" + subs.length;
             translations = await translateAll(subs.map((s) => s.text), "zh-CN", (d, n) => { this.manProgress = "翻译中 " + d + "/" + n; });
+          }
+          if (this.targetEp) {
+            const subtitles = subs.map((s, i) => ({ id: "s" + (i + 1), start: s.start, end: s.end,
+              text: s.text, translation: (translations && translations[i]) || "", words: [] }));
+            const overrides = DB.get("subtitleOverrides", {});
+            overrides[this.targetEp.id] = subtitles;
+            if (!DB.set("subtitleOverrides", overrides)) { this.toast("本机存储失败，字幕未保存"); return; }
+            this.targetEp.subtitles = subtitles;
+            const id = this.targetEp.id;
+            sessionStorage.removeItem("ccSubtitleTarget");
+            this.manText = ""; this.manProgress = "";
+            location.hash = "#/study/" + id;
+            return;
           }
           let meta = { title: "", author: "", cover: null };
           if (src) { this.manProgress = "获取视频信息…"; meta = await fetchPreview(src); }
@@ -229,11 +264,11 @@
     },
     template: `
 <div class="page-narrow">
-  <div class="page-head"><h2>导入视频</h2><span class="hint">贴链接，两种方式入库</span></div>
+  <div class="page-head"><h2>导入视频</h2><span class="hint">先放进目录，再补学习字幕</span></div>
 
   <div class="panel imp-panel">
-    <h3>① 自动入库 <span class="hint">推荐 · 云端全自动 · 全设备可见</span></h3>
-    <div class="row-gap">
+    <h3>① 添加视频链接 <span class="hint">云端目录 · 不需要 Cookie 或字幕</span></h3>
+    <div class="row-gap imp-url-row">
       <input class="imp-input" v-model="autoUrl" placeholder="粘贴 YouTube 或 B站 视频链接" @keyup.enter="checkAuto">
       <button class="btn primary" @click="checkAuto">识别链接</button>
     </div>
@@ -241,30 +276,33 @@
     <div v-if="autoPreview" class="imp-preview">
       <img v-if="autoPreview.cover" :src="autoPreview.cover" class="imp-cover" alt="">
       <div>
-        <b>{{ autoPreview.title || '(未能取到标题，不影响导入)' }}</b>
+        <b>{{ autoPreview.title || '未能取到标题，将使用视频 ID' }}</b>
         <div class="hint" v-if="autoPreview.author">{{ autoPreview.author }}</div>
       </div>
     </div>
-    <div v-if="autoParsed" class="row-gap">
-      <button class="btn primary" @click="goIssue">→ 去 GitHub 提交导入请求</button>
-      <span class="hint">提交后云端机器人自动：抓字幕 → 翻译 → 生成词典 → 上线。约 2-5 分钟，处理进度看 issue，完成后刷新目录页即可。</span>
+    <div v-if="autoParsed" class="row-gap imp-issue-row">
+      <button class="btn primary" @click="goIssue">去 GitHub 确认添加</button>
+      <span class="hint">提交 issue 后，视频先加入云端目录，可直接播放。处理进度见 issue；上线后刷新目录。</span>
     </div>
-    <p class="hint">首次使用请在 GitHub 登录态下操作；不想等云端可用下面的手动导入。</p>
+    <p class="hint">需要登录仓库所有者的 GitHub 账号提交。此步骤不会抓取或自动生成字幕。</p>
   </div>
 
   <div class="panel imp-panel">
-    <h3>② 手动导入 <span class="hint">字幕在手 · 立即生效 · 仅本机</span></h3>
-    <input class="imp-input" v-model="manUrl" placeholder="视频链接（可选：填了且字幕带时间轴即可在线播放）">
+    <h3>{{ targetEp ? '为已有视频添加字幕' : '② 手动导入字幕' }} <span class="hint">SRT/VTT · 仅当前浏览器</span></h3>
+    <div v-if="targetEp" class="imp-target"><b>{{ targetEp.title }}</b><span class="hint">只补字幕，不会重复创建视频</span><button class="btn ghost sm imp-cancel" @click="clearTarget">取消</button></div>
+    <input v-else class="imp-input" v-model="manUrl" placeholder="视频链接（可选：填了且字幕带时间轴即可在线播放）">
+    <label class="hint imp-file-label">选择 SRT/VTT 文件 <input type="file" accept=".srt,.vtt,text/vtt" @change="loadSubtitleFile"></label>
     <textarea class="imp-area" rows="7" v-model="manText" placeholder="粘贴 SRT / VTT 字幕内容，或每行一句的纯文本。&#10;SRT 示例：&#10;1&#10;00:00:01,000 --> 00:00:04,500&#10;Never gonna give you up"></textarea>
     <div class="row-gap wrap">
       <label class="hint"><input type="checkbox" v-model="manTranslate"> 自动翻译（免费接口，逐句机翻）</label>
       <span class="hint" v-if="manProgress">{{ manProgress }}</span>
     </div>
-    <button class="btn primary" :disabled="manBusy" @click="doManual">{{ manBusy ? '处理中…' : '导入到本机语料库' }}</button>
-    <p class="hint">带时间轴的 SRT/VTT + 视频链接 = 在线播放、逐句同步；纯文本 = TTS 逐句朗读模式。手动导入仅保存在本浏览器，可从下方删除。</p>
+    <button class="btn primary" :disabled="manBusy" @click="doManual">{{ manBusy ? '处理中…' : (targetEp ? '保存字幕并开始学习' : '导入到本机语料库') }}</button>
+    <p class="hint" v-if="targetEp">需要带时间轴的 SRT/VTT；字幕仅保存在当前浏览器，换设备或清除浏览器数据后不会保留。</p>
+    <p class="hint" v-else>带时间轴的 SRT/VTT + 视频链接 = 在线播放、逐句同步；纯文本 = TTS 逐句朗读模式。手动导入仅保存在本浏览器，可从下方删除。</p>
   </div>
 
-  <div class="panel imp-panel" v-if="custom.length">
+  <div class="panel imp-panel" v-if="custom.length && !targetEp">
     <h3>本机已导入（{{ custom.length }}）</h3>
     <div class="imp-item" v-for="e in custom" :key="e.id">
       <span class="imp-item-t">{{ e.shortTitle }}</span>

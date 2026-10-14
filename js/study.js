@@ -108,7 +108,7 @@
       const settings = DB.get("settings", {});
       return {
         ep,
-        subs: ep.subtitles,
+        subs: ep.subtitles || [],
         idx: 0,
         playing: false,
         playMode: "sequence",      // sequence 顺序 | sentence 单句循环 | AB
@@ -146,6 +146,7 @@
     },
     computed: {
       cur() { return this.subs[this.idx] || this.subs[0]; },
+      hasSubtitles() { return this.subs.length > 0; },
       source() { return this.ep.source || null; },
       isYt() { return this.source && this.source.platform === "youtube"; },
       isBili() { return this.source && this.source.platform === "bilibili"; },
@@ -187,7 +188,7 @@
         if (this.biliJumpSec != null) s += "&t=" + Math.floor(this.biliJumpSec);
         return s;
       },
-      progressPct() { return Math.round(((this.idx + 1) / this.subs.length) * 100); },
+      progressPct() { return this.subs.length ? Math.round(((this.idx + 1) / this.subs.length) * 100) : 0; },
       isFavSub() { return DB.isFavSub(this.ep.id, this.cur.id); },
       clozePlan() {
         const plan = {};
@@ -213,6 +214,7 @@
     },
     async mounted() {
       DB.touchEpisode(this.ep.id);
+      if (!this.hasSubtitles) return;
       DB.ensureDefaultBook();
       this.loadVoices();
       if (window.speechSynthesis) window.speechSynthesis.onvoiceschanged = () => this.loadVoices();
@@ -238,6 +240,10 @@
     },
     methods: {
       fmt,
+      addSubtitles() {
+        sessionStorage.setItem("ccSubtitleTarget", this.ep.id);
+        location.hash = "#/import";
+      },
       loadVoices() {
         try { this.voices = window.speechSynthesis.getVoices().filter((v) => (v.lang || "").toLowerCase().startsWith((CORPUS.meta.learnLang || "en").slice(0, 2))); } catch (e) {}
       },
@@ -736,7 +742,24 @@
     </div>
   </header>
 
-  <div class="study-grid">
+  <section v-if="!hasSubtitles" class="video-only-panel">
+    <div v-if="isYt" class="video-frame">
+      <iframe :src="ytLiteSrc" title="YouTube 视频" frameborder="0"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+    </div>
+    <div v-else-if="isBili" class="video-frame">
+      <iframe :src="biliSrc" title="B站视频" scrolling="no" frameborder="no"
+        referrerpolicy="no-referrer" allow="autoplay; encrypted-media" allowfullscreen></iframe>
+    </div>
+    <div class="video-only-copy">
+      <h3>视频已导入，暂无学习字幕</h3>
+      <p class="hint">可先在上方播放；若平台限制内嵌，请点击“原视频”。准备好带时间轴的 SRT/VTT 后，再添加学习字幕。</p>
+      <button class="btn primary" @click="addSubtitles">添加 SRT/VTT 字幕</button>
+      <p class="hint">字幕保存在当前浏览器，不会同步到其他设备。</p>
+    </div>
+  </section>
+
+  <div v-else class="study-grid">
     <!-- 左：播放器与控制 -->
     <section class="player-col">
       <div class="player-card">

@@ -109,7 +109,8 @@
       <div class="ep-cover" :style="{background: ep.cover ? undefined : grad(ep)}">
         <img v-if="ep.cover" :src="ep.cover" :alt="ep.shortTitle" loading="lazy" referrerpolicy="no-referrer">
         <span v-else class="ep-initial">{{ ep.shortTitle.slice(0,2) }}</span>
-        <span class="ep-dur">{{ fmtDur(ep.duration) }}</span>
+        <span class="ep-dur" v-if="ep.duration">{{ fmtDur(ep.duration) }}</span>
+        <span class="ep-pending" v-if="!ep.subtitles || !ep.subtitles.length">待加字幕</span>
         <span class="ep-status" v-if="learnedOf(ep)">已学习</span>
       </div>
       <div class="ep-info">
@@ -585,6 +586,7 @@
         route: Router.current(),
         toasts: [],
         navOpen: false,
+        importKey: 0,
       };
     },
     computed: {
@@ -607,6 +609,11 @@
     },
     methods: {
       go(p) { Router.push(p); },
+      openFreshImport() {
+        sessionStorage.removeItem("ccSubtitleTarget");
+        this.importKey++;
+        Router.push("/import");
+      },
     },
     template: `
 <div class="app-shell">
@@ -615,17 +622,17 @@
       <span class="brand-mark">语</span>
       <span class="brand-text"><b>{{ corpus.meta.name }}</b><i>{{ corpus.meta.tagline }}</i></span>
     </a>
-    <button class="nav-burger" @click="navOpen = !navOpen">☰</button>
     <div class="nav-links" :class="{open: navOpen}">
       <a href="#/" :class="{on: route.name === 'home'}">目录</a>
       <a href="#/favorites" :class="{on: route.name === 'favorites'}">收藏</a>
       <a href="#/search" :class="{on: route.name === 'search'}">搜索</a>
-      <a href="#/import" :class="{on: route.name === 'import'}">导入</a>
       <a href="#/recordings" :class="{on: route.name === 'recordings'}">录音</a>
       <a href="#/summary" :class="{on: route.name === 'summary'}">概览</a>
       <a href="#/methods" :class="{on: route.name === 'methods'}">学习方法</a>
       <a href="#/settings" :class="{on: route.name === 'settings'}">设置</a>
     </div>
+    <a class="nav-import" href="#/import" :aria-current="route.name === 'import' ? 'page' : null" @click.prevent="openFreshImport">＋ 导入视频</a>
+    <button class="nav-burger" aria-label="展开导航" @click="navOpen = !navOpen">☰</button>
   </nav>
 
   <main class="app-main">
@@ -633,7 +640,7 @@
     <study-page v-else-if="isStudy" :key="route.param" :ep-id="route.param"></study-page>
     <favorites-page v-else-if="route.name === 'favorites'"></favorites-page>
     <search-page v-else-if="route.name === 'search'"></search-page>
-    <import-page v-else-if="route.name === 'import'"></import-page>
+    <import-page v-else-if="route.name === 'import'" :key="importKey"></import-page>
     <recordings-page v-else-if="route.name === 'recordings'"></recordings-page>
     <summary-page v-else-if="route.name === 'summary'"></summary-page>
     <methods-page v-else-if="route.name === 'methods'"></methods-page>
