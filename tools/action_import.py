@@ -18,6 +18,7 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="repla
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TOOL = os.path.join(ROOT, "tools")
 IMPORTED = os.path.join(ROOT, "js", "episodes-imported.js")
+BUILTIN = os.path.join(ROOT, "js", "data.js")
 
 
 def out(k, v):
@@ -147,6 +148,35 @@ def google_enrich(texts):
     return trans, {}
 
 
+def import_link_only(src):
+    """Register a playable video without contacting the video host or requiring cookies."""
+    body = os.environ.get("ISSUE_BODY", "")
+    def field(name):
+        m = re.search(r"^" + re.escape(name) + r"\s*:\s*(.+)$", body, re.M)
+        return re.sub(r"[\r\n*/]", " ", m.group(1)).strip()[:180] if m else ""
+
+    title = field("标题") or ("YouTube 视频 " if src["platform"] == "youtube" else "B站视频 ") + src["videoId"]
+    author = field("作者") or "导入"
+    cover = field("封面")
+    if not cover.startswith("https://"):
+        cover = "https://i.ytimg.com/vi/%s/hqdefault.jpg" % src["videoId"] if src["platform"] == "youtube" else ""
+    pending = {**src, "title": title, "author": author, "cover": cover, "duration": 0, "segments": []}
+    pend_dir = os.path.join(ROOT, "_pending")
+    os.makedirs(pend_dir, exist_ok=True)
+    pend_path = os.path.join(pend_dir, "link_%s.json" % src["videoId"])
+    with io.open(pend_path, "w", encoding="utf-8") as f:
+        json.dump(pending, f, ensure_ascii=False)
+    r = subprocess.run([sys.executable, os.path.join(TOOL, "build_episode.py"), pend_path, "--allow-empty"],
+                       capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
+    print((r.stdout or "") + (r.stderr or ""), flush=True)
+    if r.returncode != 0:
+        raise RuntimeError("入库失败: " + ((r.stderr or "")[-400:] or (r.stdout or "")[-400:]))
+    m = re.search(r"OK:\s*(ep\d+)", r.stdout or "")
+    out("result", "video_only")
+    out("ep_id", m.group(1) if m else "")
+    out("title", title)
+
+
 def main():
     text = sys.argv[1] if len(sys.argv) > 1 else ""
     src = parse_url(text)
@@ -154,9 +184,13 @@ def main():
         out("result", "error")
         out("reason", "未找到可识别的视频链接（支持 YouTube / B站 视频页链接）")
         return
-    if src["videoId"] in io.open(IMPORTED, encoding="utf-8").read():
+    if any(src["videoId"] in io.open(path, encoding="utf-8").read() for path in (IMPORTED, BUILTIN)):
         out("result", "exists")
         out("reason", "该视频已在语料库中")
+        return
+
+    if os.environ.get("IMPORT_MODE") == "link":
+        import_link_only(src)
         return
 
     pend_path = run_fetch(src["url"])

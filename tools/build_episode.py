@@ -58,6 +58,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("pending")
     ap.add_argument("--ep-json", default=None, help="加工完成的 episode JSON（缺省直接用 pending）")
+    ap.add_argument("--allow-empty", action="store_true", help="只导入视频链接，字幕稍后添加")
     a = ap.parse_args()
 
     src = a.ep_json or a.pending
@@ -75,7 +76,7 @@ def main():
             "translation": (s.get("translation") or "").strip(),
             **({"words": s["words"]} if s.get("words") else {}),
         })
-    if not subs:
+    if not subs and not a.allow_empty:
         raise SystemExit("没有字幕：先解决 needs_subs（--srt 或 BI_SESSDATA）再入库")
 
     episode = {
@@ -83,7 +84,7 @@ def main():
         "title": ep.get("title") or pend.get("title") or "Untitled",
         "shortTitle": ep.get("shortTitle") or (ep.get("title") or "Untitled")[:12],
         "cover": ep.get("cover") or pend.get("cover") or None,
-        "duration": ep.get("duration") or pend.get("duration") or int(subs[-1]["end"]),
+        "duration": ep.get("duration") or pend.get("duration") or (int(subs[-1]["end"]) if subs else 0),
         "speaker": {
             "name": ep.get("author") or pend.get("author") or "Unknown",
             "gender": ep.get("gender", "F"),
@@ -95,9 +96,12 @@ def main():
         "source": {"platform": pend["platform"], "videoId": pend["videoId"], "url": pend["url"]},
         "subtitles": subs,
     }
+    if pend["platform"] == "bilibili":
+        episode["source"]["bili"] = {"bvid": pend["videoId"], "page": pend.get("page", 1)}
     dictionary = ep.get("dictionary", {})
 
-    block = "\n  /* ===== {id}: {title} ===== */\n".format(id=ep_id, title=episode["title"])
+    safe_title = re.sub(r"[\r\n*/]", " ", episode["title"])
+    block = "\n  /* ===== {id}: {title} ===== */\n".format(id=ep_id, title=safe_title)
     block += "  window.CORPUS._imported.push({id});\n".format(id=js_str(ep_id))
     block += "  window.CORPUS.episodes.push(" + json.dumps(episode, ensure_ascii=False, indent=1) + ");\n"
     if dictionary:
