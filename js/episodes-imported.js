@@ -10,6 +10,33 @@
 
   /* __EPISODES_BELOW__ */
 
+  /* ===== ep006: 作者: ===== */
+  window.CORPUS._imported.push("ep006");
+  window.CORPUS.episodes.push({
+ "id": "ep006",
+ "title": "作者:",
+ "shortTitle": "作者:",
+ "cover": "https://i.ytimg.com/vi/utJkYzxeTK4/hqdefault.jpg",
+ "duration": 0,
+ "speaker": {
+  "name": "封面:",
+  "gender": "F",
+  "flag": "🌍"
+ },
+ "stars": 3,
+ "tags": [
+  "导入"
+ ],
+ "mediaUrl": "",
+ "source": {
+  "platform": "youtube",
+  "videoId": "utJkYzxeTK4",
+  "url": "https://www.youtube.com/watch?v=utJkYzxeTK4"
+ },
+ "subtitles": []
+});
+
+
   /* ===== ep005: Alone but Not Lonely - ep. 1 ===== */
   window.CORPUS._imported.push("ep005");
   window.CORPUS.episodes.push({
